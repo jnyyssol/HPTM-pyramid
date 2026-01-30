@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HPTM Food pyramid calculator</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background-color: #020617;
+            color: #f8fafc;
+            font-family: 'Segoe UI', monospace;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 360px;
+            background: #0f172a;
+            border-right: 1px solid #1e293b;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            z-index: 10;
+            box-shadow: 5px 0 20px rgba(0,0,0,0.6);
+        }
+
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            background: radial-gradient(circle at 50% 30%, #1e293b 0%, #020617 80%);
+        }
+
+        svg { width: 100%; height: 100%; cursor: crosshair; }
+
+        h1 { font-size: 1.0rem; color: #38bdf8; border-bottom: 2px solid #334155; padding-bottom: 10px; margin: 0 0 15px 0; letter-spacing: 1px; }
+        
+        .stat-card { background: #1e293b; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px; }
+        .hero-val { font-size: 2.8rem; font-weight: 800; line-height: 1; margin: 5px 0; }
+        .hero-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; }
+        
+        .food-list { flex-grow: 1; overflow-y: auto; font-size: 0.75rem; padding-right: 15px; box-sizing: border-box; }
+        .food-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e293b; align-items: center; }
+        .food-name { font-weight: 600; width: 40%; }
+        .food-vals { width: 60%; text-align: right; color: #cbd5e1; }
+        
+        .polygon { stroke: rgba(255,255,255,0.1); stroke-width: 1px; transition: fill-opacity 0.2s; fill-opacity: 0.85; }
+        .polygon:hover { fill-opacity: 1; stroke: #fff; }
+        .polygon.glow { stroke: #fff; stroke-width: 2px; filter: drop-shadow(0 0 8px rgba(255,255,255,0.4)); }
+        
+        .label-text { font-size: 10px; fill: white; pointer-events: none; text-anchor: middle; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.9); }
+        
+        .node { fill: #38bdf8; stroke: #fff; stroke-width: 2px; cursor: grab; transition: r 0.2s; }
+        .node:hover { r: 7; fill: #fff; }
+        .node:active { cursor: grabbing; fill: #ef4444; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 5px; }
+        .input-group input { width: 100%; background: #020617; border: 1px solid #334155; border-radius: 4px; color: #f8fafc; padding: 8px; font-size: 1rem; box-sizing: border-box; }
+        .input-row { display: flex; gap: 10px; }
+        select {
+            width: 100%;
+            background: #020617;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            color: #f8fafc;
+            padding: 8px;
+            font-size: 1rem;
+            font-family: 'Segoe UI', monospace;
+        }
+        #right-sidebar {
+            width: 360px;
+            background: #0f172a;
+            border-left: 1px solid #1e293b;
+            padding: 15px;
+            z-index: 10;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.6);
+            font-size: 0.8rem;
+            line-height: 1.6;
+            color: #94a3b8;
+            overflow-y: auto;
+        }
+
+        #right-sidebar h1 {
+            font-size: 1.0rem;
+            color: #38bdf8;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 10px;
+            margin: 20px 0 15px 0;
+            letter-spacing: 1px;
+        }
+        #right-sidebar h1:first-child {
+            margin-top: 0;
+        }
+        #right-sidebar hr {
+            border: 0;
+            height: 1px;
+            background: #334155;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h1>HPTM Food pyramid calculator</h1>
+
+    <div class="stat-card">
+        <div class="input-group">
+            <label for="gender-input">Gender</label>
+            <select id="gender-input">
+                <option value="male" selected>Male</option>
+                <option value="female">Female</option>
+            </select>
+        </div>
+        <div class="input-row">
+            <div class="input-group">
+                <label for="height-input">Height (cm)</label>
+                <input type="number" id="height-input" value="180">
+            </div>
+            <div class="input-group">
+                <label for="weight-input">Weight (kg)</label>
+                <input type="number" id="weight-input" value="75">
+            </div>
+        </div>
+        <div class="input-group">
+            <label for="total-grams-input">Total food (in grams, doesn't affect HPTM)</label>
+            <input type="number" id="total-grams-input" value="1100">
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div id="sys-eff-label" class="hero-label">System Efficiency</div>
+        <div id="sys-hptm" class="hero-val">0.0</div>
+        <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.8rem;">
+            <span id="sys-grams">0g</span>
+            <span id="sys-kcal" style="color:#94a3b8">0kcal</span>
+        </div>
+        <div id="macro-totals" style="margin-top: 10px; font-size: 0.8rem; color: #cbd5e1; display: flex; justify-content: space-around; border-top: 1px solid #334155; padding-top: 10px;">
+            <span>P: <span id="total-p">0</span>g</span>
+            <span>C: <span id="total-c">0</span>g</span>
+            <span>F: <span id="total-f">0</span>g</span>
+        </div>
+    </div>
+
+    <div class="food-list" id="food-container"></div>
+
+
+</div>
+
+<div id="canvas-container">
+    <svg id="main-svg"></svg>
+</div>
+
+<script>
+    const W = 1200, H = 1000;
+    const APEX = { x: 600, y: 50 };
+    
+    const genderInput = document.getElementById("gender-input");
+    const heightInput = document.getElementById("height-input");
+    const weightInput = document.getElementById("weight-input");
+    const totalGramsInput = document.getElementById("total-grams-input");
+
+    genderInput.addEventListener('change', update);
+    heightInput.addEventListener('input', update);
+    weightInput.addEventListener('input', update);
+    totalGramsInput.addEventListener('input', update);
+
+    // --- 1. DEFINE INDEPENDENT VERTICES ---
+    // We create a structured grid of independent points {x, y}.
+    // Each row corresponds to a horizontal slice of the pyramid.
+    // The number of points varies per row to support the specific Finnish topology.
+    
+    // Helper to calc initial positions based on a perfect triangle
+    function initX(y, pct) {
+        const slopeH = 900 - 50; 
+        const currH = y - 50;
+        const width = (currH / slopeH) * 400; // 400 is half-width at base
+        const left = 600 - width;
+        const wTotal = width * 2;
+        return left + (pct * wTotal);
+    }
+
+    // The Vertices Repository
+    // This is the source of truth. Dragging updates these objects directly.
+    const vertices = {
+        // Row 0: Apex
+        r0: [ {x:600, y:50} ], 
+        
+        // Row 1
+        r1: [ {x:initX(254,0), y:254}, {x:initX(254,0.5), y:254}, {x:initX(254,1), y:254} ],
+        
+        // Row 2
+        r2: [ {x:initX(390,0), y:390}, {x:initX(390,0.5), y:390}, {x:initX(390,1), y:390} ],
+        
+        // Row 3
+        r3: [ 
+            {x:initX(526,0), y:526}, 
+            {x:initX(526,0.35), y:526}, 
+            {x:initX(526,0.65), y:526}, 
+            {x:initX(526,1), y:526} 
+        ],
+        
+        // Row 4
+        r4: [ 
+            {x:initX(662,0), y:662}, 
+            {x:initX(662,0.35), y:662}, 
+            {x:initX(662,0.55), y:662}, 
+            {x:initX(662,1), y:662} 
+        ],
+        
+        // Row 5
+        r5: [ {x:initX(798,0), y:798}, {x:initX(798,0.25), y:798}, {x:initX(798,1), y:798} ],
+        
+        // Row 6: Base
+        r6: [ {x:initX(1000,0), y:1000}, {x:initX(1000,0.75), y:1000}, {x:initX(1000,1), y:1000} ]
+    };
+
+    // --- 2. DEFINE TOPOLOGY (How vertices connect) ---
+    // Each food item lists the vertex path to draw its polygon.
+    // Order matters: Clockwise or Counter-Clockwise.
+    
+    const foodTopology = [
+        { 
+            id: "sattumat", label: "TREATS", col: "#be123c", 
+            kcal: 400, p: 2, c: 50, f: 21.3,
+            path: [ vertices.r0[0], vertices.r1[2], vertices.r1[1], vertices.r1[0] ] 
+        },
+        { 
+            id: "liha", label: "RED MEAT", col: "#9f1239", 
+            kcal: 210, p: 19.5, c: 0, f: 14.7,
+            path: [ vertices.r1[0], vertices.r1[1], vertices.r2[1], vertices.r2[0] ]
+        },
+        { 
+            id: "siipi", label: "POULTRY/EGG", col: "#e11d48", 
+            kcal: 165, p: 18.0, c: 0.5, f: 10.1,
+            path: [ vertices.r1[1], vertices.r1[2], vertices.r2[2], vertices.r2[1] ]
+        },
+        { 
+            id: "kala", label: "FISH", col: "#f59e0b", 
+            kcal: 150, p: 18.5, c: 0, f: 8.4,
+            path: [ vertices.r2[0], vertices.r2[1], vertices.r3[1], vertices.r3[0] ]
+        },
+        { 
+            id: "palko", label: "LEGUMES", col: "#d97706", 
+            kcal: 115, p: 8.0, c: 16.0, f: 2.1,
+            path: [ vertices.r2[1], vertices.r2[2], vertices.r3[3], vertices.r3[2], vertices.r3[1] ]
+        },
+        { 
+            id: "rasvat", label: "FATS", col: "#fbbf24", 
+            kcal: 720, p: 0.5, c: 0.5, f: 79.6,
+            path: [ vertices.r3[0], vertices.r3[1], vertices.r4[1], vertices.r4[0] ]
+        },
+        { 
+            id: "pahkinat", label: "NUTS", col: "#fcd34d", 
+            kcal: 610, p: 18.0, c: 12.0, f: 54.4,
+            path: [ vertices.r3[1], vertices.r3[2], vertices.r4[2], vertices.r4[1] ]
+        },
+        { 
+            id: "maito", label: "DAIRY", col: "#fef3c7", 
+            kcal: 65, p: 3.5, c: 4.8, f: 3.5,
+            path: [ vertices.r3[2], vertices.r3[3], vertices.r4[3], vertices.r4[2] ]
+        },
+        { 
+            id: "peruna", label: "POTATO", col: "#a3e635", 
+            kcal: 75, p: 1.9, c: 16.0, f: 0.4,
+            path: [ vertices.r4[0], vertices.r4[1], vertices.r5[1], vertices.r5[0] ]
+        },
+        { 
+            id: "vilja", label: "GRAINS", col: "#84cc16", 
+            kcal: 240, p: 9.0, c: 45.0, f: 2.7,
+            path: [ vertices.r4[1], vertices.r4[2], vertices.r4[3], vertices.r5[2], vertices.r5[1] ]
+        },
+        { 
+            id: "kasvis", label: "VEGETABLES", col: "#22c55e", 
+            kcal: 30, p: 1.5, c: 4.5, f: 0.7,
+            path: [ vertices.r5[0], vertices.r5[1], vertices.r6[1], vertices.r6[0] ]
+        },
+        { 
+            id: "marja", label: "BERRIES", col: "#4ade80", 
+            kcal: 45, p: 0.7, c: 8.5, f: 0.9,
+            path: [ vertices.r5[1], vertices.r5[2], vertices.r6[2], vertices.r6[1] ]
+        }
+    ];
+
+    const svg = d3.select("#main-svg");
+    const container = svg.append("g");
+
+    // --- 3. ENGINE CORE ---
+
+    function getArea(points) {
+        return Math.abs(d3.polygonArea(points.map(p => [p.x, p.y])));
+    }
+
+    function update() {
+        // Read user inputs
+        const gender = genderInput.value;
+        const H = +heightInput.value || 180; // Height in cm
+        const W = +weightInput.value || 75;  // Weight in kg
+        const TOTAL_GRAMS = +totalGramsInput.value || 2500;
+
+        // Calculate LBM using Hume Formula
+        let LBM;
+        if (gender === 'male') {
+            LBM = (0.32810 * W) + (0.33929 * H) - 29.5336;
+        } else { // female
+            LBM = (0.29569 * W) + (0.41813 * H) - 43.2933;
+        }
+
+        // 1. Calculate Total Mesh Area (Sum of all polygons)
+        let currentTotalArea = 0;
+        foodTopology.forEach(f => {
+            currentTotalArea += getArea(f.path);
+        });
+
+        // 2. Render Loop
+        let globalStats = { p:0, c:0, f:0, kcal:0, g:0 };
+        let html = "";
+        
+        // Prepare Data for D3
+        const renderData = foodTopology.map(f => {
+            const area = getArea(f.path);
+            const mass = (area / currentTotalArea) * TOTAL_GRAMS;
+            
+            // Nutrition Math
+            const factor = mass / 100;
+            const itemKcal = f.kcal * factor;
+            const itemP = f.p * factor;
+            const itemC = f.c * factor;
+            const itemF = f.f * factor;
+            
+            // HPTM: (P_per_100 / (Kcal_per_100 * LBM)) * 10000
+            const hptm = (f.p / (f.kcal * LBM)) * 10000;
+            
+            globalStats.p += itemP;
+            globalStats.c += itemC;
+            globalStats.f += itemF;
+            globalStats.kcal += itemKcal;
+            globalStats.g += mass;
+
+            return {
+                ...f,
+                points: f.path.map(p => [p.x, p.y]),
+                mass,
+                itemKcal,
+                itemP,
+                itemC,
+                itemF,
+                hptm,
+                centroid: d3.polygonCentroid(f.path.map(p => [p.x, p.y]))
+            };
+        });
+
+        // 3. Draw Polygons
+        const polys = container.selectAll("path.polygon").data(renderData, d => d.id);
+        
+        polys.enter().append("path")
+            .attr("class", "polygon")
+            .merge(polys)
+            .attr("d", d => `M${d.points.join("L")}Z`)
+            .attr("fill", d => d.col)
+            .classed("glow", d => d.hptm >= 10);
+            
+        polys.exit().remove();
+
+        // 4. Draw Labels
+        const labels = container.selectAll("text.label-text").data(renderData, d => d.id);
+        
+        const labelsEnter = labels.enter().append("text")
+            .attr("class", "label-text");
+            
+        labelsEnter.append("tspan").attr("class", "label-name").attr("dy", "-0.6em");
+        labelsEnter.append("tspan").attr("class", "label-mass").attr("dy", "1.2em").style("font-size", "0.9em").style("fill-opacity", 0.8);
+
+        const labelsUpdate = labelsEnter.merge(labels)
+            .attr("x", d => d.centroid[0])
+            .attr("y", d => d.centroid[1])
+            .style("opacity", d => d.mass > 40 ? 1 : 0); // Hide if too small
+
+        labelsUpdate.select(".label-name")
+            .attr("x", d => d.centroid[0])
+            .text(d => d.label);
+
+        labelsUpdate.select(".label-mass")
+            .attr("x", d => d.centroid[0])
+            .text(d => Math.round(d.mass)+"g");
+
+        labels.exit().remove();
+
+
+        // 5. Render Sidebar List
+        renderData.forEach(d => {
+            html += `
+            <div class="food-item">
+                <div class="food-name" style="color:${d.col}">${d.label}</div>
+                <div class="food-vals">
+                    <span style="font-weight:bold">${Math.round(d.mass)}g</span> 
+                    <span style="font-size:0.65rem">(${Math.round(d.itemKcal)}kcal)</span><br>
+                    <span style="font-size:0.65rem; color: #cbd5e1;">
+                        P:${Math.round(d.itemP)} C:${Math.round(d.itemC)} F:${Math.round(d.itemF)}
+                    </span><br>
+                    <span style="color:${d.hptm>=10 ? '#22c55e':'#94a3b8'}">HPTM ${d.hptm.toFixed(1)}</span>
+                </div>
+            </div>`;
+        });
+        document.getElementById("food-container").innerHTML = html;
+
+        // 6. System Stats
+        document.getElementById("sys-eff-label").innerText = `Total HPTM (LBM ${LBM.toFixed(1)})`;
+        const sysHptm = (globalStats.p / (globalStats.kcal * LBM)) * 10000;
+        const hero = document.getElementById("sys-hptm");
+        hero.innerText = isFinite(sysHptm) ? sysHptm.toFixed(1) : "0.0";
+        hero.style.color = sysHptm > 9.99 ? "#22c55e" : "#ef4444";
+        document.getElementById("sys-grams").innerText = Math.round(globalStats.g) + "g";
+        document.getElementById("sys-kcal").innerText = Math.round(globalStats.kcal) + "kcal";
+        document.getElementById("total-p").innerText = Math.round(globalStats.p);
+        document.getElementById("total-c").innerText = Math.round(globalStats.c);
+        document.getElementById("total-f").innerText = Math.round(globalStats.f);
+        
+        renderNodes();
+    }
+
+    // --- 4. NODE MANIPULATION ---
+    
+    function renderNodes() {
+        // Flatten the vertices object into an array for D3
+        let allNodes = [];
+        Object.keys(vertices).forEach(key => {
+            vertices[key].forEach(pt => allNodes.push(pt));
+        });
+
+        const circles = container.selectAll("circle.node").data(allNodes);
+
+        circles.enter().append("circle")
+            .attr("class", "node")
+            .attr("r", 5)
+            .call(d3.drag().on("drag", function(e, d) {
+                // PURE INDEPENDENCE
+                // We simply update the x/y of the bound data object.
+                // Because 'd' is a reference to the object inside 'vertices',
+                // and 'foodTopology' references those same objects,
+                // everything updates automatically.
+                
+                d.x = e.x;
+                d.y = e.y;
+                update();
+                d3.select(this).attr("cx", d.x).attr("cy", d.y);
+            }))
+            .merge(circles)
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
+            
+        circles.exit().remove();
+    }
+
+    // Init
+    update();
+
+</script>
+<div id="right-sidebar">
+    <h1>What is HPTM?</h1>
+    <p>HPTM measures a food's protein efficiency relative to your lean body mass (LBM). A score of 10 is a standardized benchmark: it means the food is dense enough to meet a 2g/LBM-kg target if total energy intake is scaled to a generic weight loss or maintenance level (approx. 20 kcal per kg of LBM).</p>
+    <p>Formula:<br><code>HPTM = (Protein / (Calories * LBM)) * 10000</code></p>
+    <p>The metric does not account for your individual daily activity, but serves as a universal quality standard: foods with a score over 10 are on the "safe side," while foods under 10 require support from highly protein-dense choices to keep the day's total in balance.</p>
+    <hr>
+    <h1>Issue with the Finnish food pyramid</h1>
+    <p>The key insight of the HPTM metric and what makes it useful is that the protein requirement scales linearly while the calorie requirement does not. This means that it's much harder for bigger people to eat food of equivalent quality in terms of protein than it's for lighter people. Try changing the values in the calculator and observe how smaller people have higher HPTM scores. This essentially mean that less protein dense is better for them than the same food is relatively for bigger people. In other words, the food pyramid works as is for very light people, but for very large people it would be better inverted (as long as you cut the treats). </p>
+    <hr>
+    <h1>Default nutrient values used (per 100g)</h1>
+    <div class="food-list">
+        <div class="food-item"><div class="food-name" style="color:#be123c">TREATS</div><div class="food-vals" style="font-size:0.65rem">P:2 C:50 F:21.3</div></div>
+        <div class="food-item"><div class="food-name" style="color:#9f1239">RED MEAT</div><div class="food-vals" style="font-size:0.65rem">P:19.5 C:0 F:14.7</div></div>
+        <div class="food-item"><div class="food-name" style="color:#e11d48">POULTRY/EGG</div><div class="food-vals" style="font-size:0.65rem">P:18 C:0.5 F:10.1</div></div>
+        <div class="food-item"><div class="food-name" style="color:#f59e0b">FISH</div><div class="food-vals" style="font-size:0.65rem">P:18.5 C:0 F:8.4</div></div>
+        <div class="food-item"><div class="food-name" style="color:#d97706">LEGUMES</div><div class="food-vals" style="font-size:0.65rem">P:8 C:16 F:2.1</div></div>
+        <div class="food-item"><div class="food-name" style="color:#fbbf24">FATS</div><div class="food-vals" style="font-size:0.65rem">P:0.5 C:0.5 F:79.6</div></div>
+        <div class="food-item"><div class="food-name" style="color:#fcd34d">NUTS</div><div class="food-vals" style="font-size:0.65rem">P:18 C:12 F:54.4</div></div>
+        <div class="food-item"><div class="food-name" style="color:#fef3c7">DAIRY</div><div class="food-vals" style="font-size:0.65rem">P:3.5 C:4.8 F:3.5</div></div>
+        <div class="food-item"><div class="food-name" style="color:#a3e635">POTATO</div><div class="food-vals" style="font-size:0.65rem">P:1.9 C:16 F:0.4</div></div>
+        <div class="food-item"><div class="food-name" style="color:#84cc16">GRAINS</div><div class="food-vals" style="font-size:0.65rem">P:9 C:45 F:2.7</div></div>
+        <div class="food-item"><div class="food-name" style="color:#22c55e">VEGETABLES</div><div class="food-vals" style="font-size:0.65rem">P:1.5 C:4.5 F:0.7</div></div>
+        <div class="food-item"><div class="food-name" style="color:#4ade80">BERRIES</div><div class="food-vals" style="font-size:0.65rem">P:0.7 C:8.5 F:0.9</div></div>
+    </div>
+</div>
+</body>
+</html>
